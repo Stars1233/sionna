@@ -397,7 +397,6 @@ class TurboEncoder(Block):
             num_term_bits_punct = 0
 
         output_shape = list(bits.shape)
-        output_shape[0] = -1
         output_shape[-1] = self._n + num_term_bits_punct
 
         preterm_n = int(self._k / self._coderate_conv)

@@ -8,7 +8,7 @@ import importlib
 import pkgutil
 from types import ModuleType
 
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 
 # Extend __path__ to include sionna namespace packages (e.g., sionna-rt)
 __path__ = pkgutil.extend_path(__path__, __name__)

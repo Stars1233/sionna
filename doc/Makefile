@@ -68,7 +68,7 @@ html:
 	@mv "$(BUILDDIR)/html_temp" "$(BUILDDIR)/html/v$(VERSION)"
 	# Create version metadata and redirect
 	@echo '[{"version": "$(VERSION)", "url": "$(BASE_PATH)/v$(VERSION)/"}, {"version": "0.19.2", "url": "https://jhoydis.github.io/sionna-0.19.2-doc/"}]' > "$(BUILDDIR)/html/versions.json"
-	# Copy latest version to root for unversioned URLs (e.g., /phy/... -> /v2.0.0/phy/...)
+	# Copy latest version to root for unversioned URLs (e.g., /phy/... -> /v2.0.1/phy/...)
 	@cp -r "$(BUILDDIR)/html/v$(VERSION)/"* "$(BUILDDIR)/html/"
 	@echo "Copied v$(VERSION) to root for unversioned URL support"
 

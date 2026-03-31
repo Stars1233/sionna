@@ -235,7 +235,7 @@ class CRCEncoder(Block):
         x_crc = torch.matmul(x_exp.to(self.dtype), self._g_mat_crc)
 
         # Take modulo 2 of x_crc
-        x_crc = x_crc.to(torch.int64)
+        x_crc = x_crc.to(torch.int32)
         x_crc = int_mod_2(x_crc)
         # Cast back to original dtype
         x_crc = x_crc.to(x_exp.dtype)

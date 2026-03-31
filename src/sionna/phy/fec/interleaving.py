@@ -403,7 +403,7 @@ class RandomInterleaver(Block):
         perm_seq = torch.argsort(rand_seq, dim=-1)
 
         if inverse:
-            perm_seq = torch.argsort(perm_seq.float(), dim=-1).to(torch.int64)
+            perm_seq = torch.argsort(perm_seq, dim=-1)
 
         # Move to target device if needed
         if perm_seq.device != device:
@@ -637,7 +637,7 @@ class Turbo3GPPInterleaver(Block):
         perm_seq = torch.tensor(perm_seq, dtype=torch.int64, device=device)
 
         if inverse:
-            perm_seq = torch.argsort(perm_seq.float()).to(torch.int64)
+            perm_seq = torch.argsort(perm_seq)
 
         return perm_seq
 

@@ -335,8 +335,8 @@ class TestLSPGenerator:
             lsp_sampler.topology_updated_callback()
             samples[model_name]["los"] = {
                 "lsp": lsp_sampler(),
-                "zod_offset": scenario.zod_offset.cpu().numpy(),
-                "pathloss": lsp_sampler.sample_pathloss()[:, 0, :].cpu().numpy(),
+                "zod_offset": scenario.zod_offset.cpu().numpy().copy(),
+                "pathloss": lsp_sampler.sample_pathloss()[:, 0, :].cpu().numpy().copy(),
             }
 
             # NLoS
@@ -348,8 +348,8 @@ class TestLSPGenerator:
             lsp_sampler.topology_updated_callback()
             samples[model_name]["nlos"] = {
                 "lsp": lsp_sampler(),
-                "zod_offset": scenario.zod_offset.cpu().numpy(),
-                "pathloss": lsp_sampler.sample_pathloss()[:, 0, :].cpu().numpy(),
+                "zod_offset": scenario.zod_offset.cpu().numpy().copy(),
+                "pathloss": lsp_sampler.sample_pathloss()[:, 0, :].cpu().numpy().copy(),
             }
 
             # O2I
@@ -361,16 +361,16 @@ class TestLSPGenerator:
             lsp_sampler.topology_updated_callback()
             samples[model_name]["o2i"] = {
                 "lsp": lsp_sampler(),
-                "zod_offset": scenario.zod_offset.cpu().numpy(),
-                "pathloss": lsp_sampler.sample_pathloss()[:, 0, :].cpu().numpy(),
+                "zod_offset": scenario.zod_offset.cpu().numpy().copy(),
+                "pathloss": lsp_sampler.sample_pathloss()[:, 0, :].cpu().numpy().copy(),
             }
 
-            # Store scenario info
-            samples[model_name]["los_prob"] = scenario.los_probability.cpu().numpy()
-            samples[model_name]["d_2d"] = scenario.distance_2d.cpu().numpy()
-            samples[model_name]["d_2d_ut"] = scenario.matrix_ut_distance_2d.cpu().numpy()
-            samples[model_name]["d_2d_out"] = scenario.distance_2d_out.cpu().numpy()
-            samples[model_name]["d_3d"] = scenario.distance_3d[0, 0, :].cpu().numpy()
+            # Store scenario info — use .copy() to decouple from in-place-updated buffers
+            samples[model_name]["los_prob"] = scenario.los_probability.cpu().numpy().copy()
+            samples[model_name]["d_2d"] = scenario.distance_2d.cpu().numpy().copy()
+            samples[model_name]["d_2d_ut"] = scenario.matrix_ut_distance_2d.cpu().numpy().copy()
+            samples[model_name]["d_2d_out"] = scenario.distance_2d_out.cpu().numpy().copy()
+            samples[model_name]["d_3d"] = scenario.distance_3d[0, 0, :].cpu().numpy().copy()
             if model_name == "rma":
                 samples[model_name]["w"] = scenario.average_street_width
                 samples[model_name]["h"] = scenario.average_building_height

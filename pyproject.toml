@@ -15,7 +15,7 @@ exclude = ["sionna.rt*"]
 
 [project]
 name = "sionna"
-version = "2.0.0"
+version = "2.0.1"
 description = "Sionna - A hardware-accelerated differentiable open-source library for research on communication systems"
 readme = "README.md"
 license = {text = "Apache-2.0"}

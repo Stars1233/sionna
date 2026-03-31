@@ -6,7 +6,6 @@
 
 from typing import Optional, Union
 
-import numpy as np
 import torch
 
 from sionna.phy import Block
@@ -418,7 +417,7 @@ class TurboDecoder(Block):
             )
 
         mask_ = mask_.reshape(-1)
-        self.register_buffer("_punct_indices", torch.where(mask_)[0].unsqueeze(-1).to(torch.int64))
+        self.register_buffer("_punct_indices", torch.where(mask_)[0].unsqueeze(-1).to(torch.int32))
 
     @torch.compiler.disable
     def call(self, llr_ch: torch.Tensor, /) -> torch.Tensor:
@@ -478,8 +477,7 @@ class TurboDecoder(Block):
         llr_ch = llr_ch.reshape(-1, self._n)
         batch_size = llr_ch.shape[0]
 
-        output_shape[0] = -1
-        output_shape[-1] = self._k  # Assign k to the last dimension
+        output_shape[-1] = self._k
 
         # Get codewords for each encoder
         y1_cw, y2_cw = self._convenc_cws(llr_ch)

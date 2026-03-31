@@ -435,7 +435,6 @@ class ViterbiDecoder(Block):
 
         output_shape = list(inputs.shape)
         y_resh = inputs.reshape(-1, self._n)
-        output_shape[0] = -1
         if self._return_info_bits:
             output_shape[-1] = self._k
         else:
@@ -948,7 +947,6 @@ class BCJRDecoder(Block):
         if self._op_bits is not None and self._op_bits.device != input_device:
             self.to(input_device)
 
-        output_shape[0] = -1
         output_shape[-1] = self._k
         llr_ch = llr_ch.reshape(-1, self._n)
         batch_size = llr_ch.shape[0]

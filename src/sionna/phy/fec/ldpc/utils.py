@@ -313,14 +313,14 @@ class WeightedBPCallback(Object):
         num_cns = pcm.shape[0]
 
         # Compute row splits for VN perspective
-        vn_row_splits = np.zeros(num_vns + 1, dtype=np.int64)
+        vn_row_splits = np.zeros(num_vns + 1, dtype=np.int32)
         for i in vn_idx_sorted:
             vn_row_splits[i + 1] += 1
         vn_row_splits = np.cumsum(vn_row_splits)
 
         # Compute row splits for CN perspective
         cn_idx_sorted = cn_idx[idx_cn_sorted]
-        cn_row_splits = np.zeros(num_cns + 1, dtype=np.int64)
+        cn_row_splits = np.zeros(num_cns + 1, dtype=np.int32)
         for i in cn_idx_sorted:
             cn_row_splits[i + 1] += 1
         cn_row_splits = np.cumsum(cn_row_splits)
@@ -332,7 +332,7 @@ class WeightedBPCallback(Object):
         max_cn_degree = int(cn_degrees.max()) if len(cn_degrees) > 0 else 0
 
         # Build VN gather index: maps (vn, position) -> edge_index
-        vn_gather_idx = np.zeros((num_vns, max_vn_degree), dtype=np.int64)
+        vn_gather_idx = np.zeros((num_vns, max_vn_degree), dtype=np.int32)
         for vn in range(num_vns):
             start = vn_row_splits[vn]
             end = vn_row_splits[vn + 1]
@@ -342,7 +342,7 @@ class WeightedBPCallback(Object):
                 vn_gather_idx[vn, :degree] = idx_vn_sorted[start:end]
 
         # Build CN gather index: maps (cn, position) -> edge_index
-        cn_gather_idx = np.zeros((num_cns, max_cn_degree), dtype=np.int64)
+        cn_gather_idx = np.zeros((num_cns, max_cn_degree), dtype=np.int32)
         for cn in range(num_cns):
             start = cn_row_splits[cn]
             end = cn_row_splits[cn + 1]
@@ -353,11 +353,11 @@ class WeightedBPCallback(Object):
         # Register as buffers
         self.register_buffer(
             "_vn_gather_idx",
-            torch.tensor(vn_gather_idx, dtype=torch.long, device=self.device)
+            torch.tensor(vn_gather_idx, dtype=torch.int32, device=self.device)
         )
         self.register_buffer(
             "_cn_gather_idx",
-            torch.tensor(cn_gather_idx, dtype=torch.long, device=self.device)
+            torch.tensor(cn_gather_idx, dtype=torch.int32, device=self.device)
         )
         self._num_vns = num_vns
         self._num_cns = num_cns

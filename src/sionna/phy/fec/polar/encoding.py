@@ -132,7 +132,7 @@ class PolarEncoder(Block):
         """Pre-calculate encoding indices stage-wise for gather operations."""
         nb_stages = int(np.log2(n))
         # Last position denotes empty placeholder (points to element n+1)
-        ind_gather = np.ones([nb_stages, n + 1], dtype=np.int64) * n
+        ind_gather = np.ones([nb_stages, n + 1], dtype=np.int32) * n
 
         for s in range(nb_stages):
             ind_range = np.arange(int(n / 2))
@@ -140,7 +140,7 @@ class PolarEncoder(Block):
             ind_origin = ind_dest + 2**s
             ind_gather[s, ind_dest] = ind_origin  # Update gather indices
 
-        ind_gather = torch.tensor(ind_gather, dtype=torch.int64, device=self.device)
+        ind_gather = torch.tensor(ind_gather, dtype=torch.int32, device=self.device)
 
         return ind_gather
 
@@ -345,12 +345,12 @@ class Polar5GEncoder(PolarEncoder):
         # Register rate-matching and interleaver indices as buffers
         self.register_buffer(
             "_ind_rate_matching_t",
-            torch.tensor(idx_rm.astype(np.int64), dtype=torch.int64, device=self.device),
+            torch.tensor(idx_rm.astype(np.int32), dtype=torch.int32, device=self.device),
         )
         if idx_input is not None:
             self.register_buffer(
                 "_ind_input_int_t",
-                torch.tensor(idx_input, dtype=torch.int64, device=self.device),
+                torch.tensor(idx_input, dtype=torch.int32, device=self.device),
             )
         else:
             self._ind_input_int_t = None

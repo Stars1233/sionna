@@ -41,7 +41,8 @@ def _add_backrefs(app: Sphinx, doctree, docname: str):
         if not refs:
             continue
 
-        # De-duplicate by (docname, anchor) and keep stable order
+        # De-duplicate by (docname, anchor), then sort for deterministic output
+        # across parallel builds (citation_refs iteration order is unstable).
         seen = set()
         unique_refs = []
         for ref_docname, ref_id in refs:
@@ -49,6 +50,7 @@ def _add_backrefs(app: Sphinx, doctree, docname: str):
             if pair not in seen:
                 seen.add(pair)
                 unique_refs.append(pair)
+        unique_refs.sort()
 
         # Build URI list
         links = []

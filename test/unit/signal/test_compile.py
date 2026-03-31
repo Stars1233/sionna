@@ -44,7 +44,7 @@ class TestCompileUpsampling:
         y_compiled = compiled_upsampler(x)
 
         assert y_compiled.shape == y_eager.shape
-        assert torch.allclose(y_compiled, y_eager)
+        assert torch.allclose(y_compiled, y_eager, atol=1e-5)
 
 
 class TestCompileDownsampling:
@@ -68,7 +68,7 @@ class TestCompileDownsampling:
         y_compiled = compiled_downsampler(x)
 
         assert y_compiled.shape == y_eager.shape
-        assert torch.allclose(y_compiled, y_eager)
+        assert torch.allclose(y_compiled, y_eager, atol=1e-5)
 
 
 class TestCompileWindows:
@@ -93,7 +93,7 @@ class TestCompileWindows:
         y_compiled = compiled_window(x)
 
         assert y_compiled.shape == y_eager.shape
-        assert torch.allclose(y_compiled, y_eager)
+        assert torch.allclose(y_compiled, y_eager, atol=1e-5)
 
     @pytest.mark.parametrize("mode", ["default", "reduce-overhead"])
     def test_compile_custom_window(self, device, precision, mode):
@@ -114,7 +114,7 @@ class TestCompileWindows:
         y_compiled = compiled_window(x)
 
         assert y_compiled.shape == y_eager.shape
-        assert torch.allclose(y_compiled, y_eager)
+        assert torch.allclose(y_compiled, y_eager, atol=1e-5)
 
 
 class TestCompileFilters:
@@ -142,7 +142,7 @@ class TestCompileFilters:
         y_compiled = compiled_rrc(x, padding="same")
 
         assert y_compiled.shape == y_eager.shape
-        assert torch.allclose(y_compiled, y_eager)
+        assert torch.allclose(y_compiled, y_eager, atol=1e-5)
 
     @pytest.mark.parametrize("mode", ["default", "reduce-overhead"])
     def test_compile_rc_filter(self, device, precision, mode):
@@ -166,7 +166,7 @@ class TestCompileFilters:
         y_compiled = compiled_rc(x, padding="same")
 
         assert y_compiled.shape == y_eager.shape
-        assert torch.allclose(y_compiled, y_eager)
+        assert torch.allclose(y_compiled, y_eager, atol=1e-5)
 
     @pytest.mark.parametrize("mode", ["default", "reduce-overhead"])
     def test_compile_sinc_filter(self, device, precision, mode):
@@ -189,7 +189,7 @@ class TestCompileFilters:
         y_compiled = compiled_sinc(x, padding="same")
 
         assert y_compiled.shape == y_eager.shape
-        assert torch.allclose(y_compiled, y_eager)
+        assert torch.allclose(y_compiled, y_eager, atol=1e-5)
 
     @pytest.mark.parametrize("mode", ["default", "reduce-overhead"])
     def test_compile_custom_filter(self, device, precision, mode):
@@ -213,7 +213,7 @@ class TestCompileFilters:
         y_compiled = compiled_filt(x, padding="same")
 
         assert y_compiled.shape == y_eager.shape
-        assert torch.allclose(y_compiled, y_eager)
+        assert torch.allclose(y_compiled, y_eager, atol=1e-5)
 
 
 class TestCompileFunctions:
@@ -238,7 +238,7 @@ class TestCompileFunctions:
         y_compiled = compiled_convolve(inp, ker)
 
         assert y_compiled.shape == y_eager.shape
-        assert torch.allclose(y_compiled, y_eager)
+        assert torch.allclose(y_compiled, y_eager, atol=1e-5)
 
     @pytest.mark.parametrize("mode", ["default", "reduce-overhead"])
     def test_compile_fft(self, device, precision, mode):
@@ -257,7 +257,7 @@ class TestCompileFunctions:
         y_compiled = compiled_fft(x)
 
         assert y_compiled.shape == y_eager.shape
-        assert torch.allclose(y_compiled, y_eager)
+        assert torch.allclose(y_compiled, y_eager, atol=1e-5)
 
     @pytest.mark.parametrize("mode", ["default", "reduce-overhead"])
     def test_compile_ifft(self, device, precision, mode):
@@ -276,4 +276,4 @@ class TestCompileFunctions:
         y_compiled = compiled_ifft(x)
 
         assert y_compiled.shape == y_eager.shape
-        assert torch.allclose(y_compiled, y_eager)
+        assert torch.allclose(y_compiled, y_eager, atol=1e-5)

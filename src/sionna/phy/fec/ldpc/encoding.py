@@ -4,7 +4,7 @@
 #
 """Blocks for LDPC channel encoding and utility functions."""
 
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 import numbers
 import warnings
 
@@ -43,9 +43,19 @@ class LDPC5GEncoder(Block):
     :input bits: [..., k], `torch.float`.
         Binary tensor containing the information bits to be encoded.
 
-    :output cw: [..., n], `torch.float`.
-        Binary tensor of same shape as inputs besides last dimension has
-        changed to `n` containing the encoded codeword bits.
+    :input rv: `None` | list of int.
+        List of redundancy version indices (0–3) for HARQ-IR
+        rate-matching per TS 38.212 Table 5.4.2.1-2.
+        If `None` (default), standard RV 0 encoding is used and the
+        output shape is ``[..., n]``.  When provided, each RV produces
+        an independent rate-matched codeword and the output shape
+        becomes ``[..., len(rv), n]``.
+
+    :output cw: [..., n] or [..., len(rv), n], `torch.float`.
+        Encoded codeword bits.  Same shape as the input with the last
+        dimension replaced by ``n``.  When ``rv`` is provided, an
+        additional dimension of size ``len(rv)`` is inserted before the
+        codeword dimension.
 
     .. rubric:: Notes
 
@@ -69,7 +79,12 @@ class LDPC5GEncoder(Block):
         u = torch.randint(0, 2, (10, 100), dtype=torch.float32)
         c = encoder(u)
         print(c.shape)
-        # torch.Size([10, 200])
+        # [10, 200]
+
+        # HARQ: produce two redundancy versions
+        c_harq = encoder(u, rv=[0, 2])
+        print(c_harq.shape)
+        # [10, 2, 200]
     """
 
     def __init__(
@@ -142,16 +157,16 @@ class LDPC5GEncoder(Block):
         # Store indices for fast gathering (instead of explicit matmul)
         # Register as buffers for CUDAGraph compatibility
         self.register_buffer("_pcm_a_ind", torch.tensor(
-            self._mat_to_ind(pcm_a), dtype=torch.int64, device=self.device
+            self._mat_to_ind(pcm_a), dtype=torch.int32, device=self.device
         ))
         self.register_buffer("_pcm_b_inv_ind", torch.tensor(
-            self._mat_to_ind(pcm_b_inv), dtype=torch.int64, device=self.device
+            self._mat_to_ind(pcm_b_inv), dtype=torch.int32, device=self.device
         ))
         self.register_buffer("_pcm_c1_ind", torch.tensor(
-            self._mat_to_ind(pcm_c1), dtype=torch.int64, device=self.device
+            self._mat_to_ind(pcm_c1), dtype=torch.int32, device=self.device
         ))
         self.register_buffer("_pcm_c2_ind", torch.tensor(
-            self._mat_to_ind(pcm_c2), dtype=torch.int64, device=self.device
+            self._mat_to_ind(pcm_c2), dtype=torch.int32, device=self.device
         ))
 
         self._num_bits_per_symbol = num_bits_per_symbol
@@ -159,9 +174,9 @@ class LDPC5GEncoder(Block):
             out_int, out_int_inv = self.generate_out_int(
                 self._n, self._num_bits_per_symbol
             )
-            self.register_buffer("_out_int", torch.tensor(out_int, dtype=torch.int64, device=self.device))
+            self.register_buffer("_out_int", torch.tensor(out_int, dtype=torch.int32, device=self.device))
             self.register_buffer("_out_int_inv", torch.tensor(
-                out_int_inv, dtype=torch.int64, device=self.device
+                out_int_inv, dtype=torch.int32, device=self.device
             ))
 
     ###############################
@@ -209,6 +224,46 @@ class LDPC5GEncoder(Block):
         return self._num_bits_per_symbol
 
     @property
+    def k_filler(self) -> int:
+        """Number of filler bits added to pad ``k`` to ``k_ldpc``."""
+        return self._k_ldpc - self._k
+
+    @property
+    def n_cb(self) -> int:
+        """Circular buffer length (excludes first 2Z)."""
+        return self._n_ldpc - 2 * self._z
+
+    @property
+    def n_cb_comp(self) -> int:
+        """Compressed circular buffer length (excludes first 2Z and fillers)."""
+        return self.n_cb - self.k_filler
+
+    @property
+    def rv_starts(self) -> List[int]:
+        r"""RV start positions ``k0`` from TS 38.212 Table 5.4.2.1-2.
+
+        Returns a list of length 4 indexed by ``rv_id``.  Values are in
+        spec buffer space (after the first 2Z punctured positions,
+        before filler removal).
+
+        .. math::
+            k_0 = \left\lfloor \frac{\text{coeff} \cdot N_{cb}}
+                  {N_{\text{cols}} \cdot Z_c} \right\rfloor \cdot Z_c
+
+        where :math:`N_{\text{cols}}` is 66 (BG1) or 50 (BG2).
+        Currently assumes ``I_LBRM=0``, i.e., ``N_cb = N``.
+        """
+        n_cb = self.n_cb
+        z = self._z
+        if self._bg == "bg1":
+            coeffs = [0, 17, 33, 56]
+            n_cols = 66
+        else:
+            coeffs = [0, 13, 25, 43]
+            n_cols = 50
+        return [(c * n_cb // (n_cols * z)) * z for c in coeffs]
+
+    @property
     def out_int(self) -> torch.Tensor:
         """Output interleaver sequence as defined in 5.4.2.2."""
         return self._out_int
@@ -221,6 +276,29 @@ class LDPC5GEncoder(Block):
     #################
     # Utility methods
     #################
+
+    def _k0_comp(self, k0: int) -> int:
+        """Map ``k0`` from spec buffer space to compressed RM buffer space.
+
+        The compressed buffer omits the contiguous filler block.
+        """
+        filler_start = self._k - 2 * self._z
+        filler_len = self.k_filler
+        if filler_len <= 0 or k0 < filler_start:
+            return k0
+        if k0 < filler_start + filler_len:
+            return filler_start
+        return k0 - filler_len
+
+    def get_start_positions_comp(self, rv_list: List[int]) -> List[int]:
+        """Return compressed-buffer start positions for a list of RV indices.
+
+        :param rv_list: List of RV indices (each 0–3).
+
+        :output: Corresponding start positions in the compressed RM buffer.
+        """
+        rv_start_map = self.rv_starts
+        return [self._k0_comp(rv_start_map[rv_id]) for rv_id in rv_list]
 
     def generate_out_int(
         self, n: int, num_bits_per_symbol: int
@@ -586,7 +664,7 @@ class LDPC5GEncoder(Block):
             gat_idx[r_val, c_val] = c_idx[idx]
             c_val += 1
 
-        return gat_idx.astype(np.int64)
+        return gat_idx.astype(np.int32)
 
     def _matmul_gather(self, mat: torch.Tensor, vec: torch.Tensor) -> torch.Tensor:
         """Implements a fast sparse matmul via gather function."""
@@ -620,7 +698,7 @@ class LDPC5GEncoder(Block):
         c = c.unsqueeze(-1)  # returns nx1 vector
         return c
 
-    def build(self, input_shape: tuple) -> None:
+    def build(self, input_shape: tuple, **kwargs) -> None:
         """Build block and check for valid input shapes."""
         if input_shape[-1] != self._k:
             raise ValueError(f"Last dimension must be of length k={self._k}.")
@@ -639,68 +717,82 @@ class LDPC5GEncoder(Block):
             # Input datatype consistency should only be evaluated once
             self._check_input = False
 
-    def call(self, bits: torch.Tensor, /) -> torch.Tensor:
-        """5G LDPC encoding function including rate-matching.
+    def call(
+        self,
+        bits: torch.Tensor,
+        /,
+        *,
+        rv: Optional[List[int]] = None,
+    ) -> torch.Tensor:
+        """5G LDPC encoding including rate-matching.
 
-        This function returns the encoded codewords as specified by the
-        3GPP NR Initiative :cite:p:`3GPPTS38212` including puncturing and
-        shortening.
+        :param bits: ``[..., k]`` information bits to be encoded.
+        :param rv: Redundancy version indices (0–3) for HARQ-IR.
+            If `None`, standard RV 0 rate-matching is used.
 
-        :param bits: Tensor of shape `[..., k]` containing the information
-            bits to be encoded.
-
-        :output cw: Tensor of shape `[..., n]` containing the encoded
-            codewords.
+        :output: ``[..., n]`` or ``[..., len(rv), n]`` encoded codewords.
         """
-        # Reshape inputs to [..., k]
+        # Validate rv early
+        if rv is not None:
+            rv = list(rv)
+            if not rv:
+                raise ValueError("rv must be a non-empty list of RV indices.")
+            for v in rv:
+                if v not in (0, 1, 2, 3):
+                    raise ValueError(f"Invalid RV index {v}; must be 0–3.")
+
         input_shape = list(bits.shape)
-        new_shape = [-1, input_shape[-1]]
-        u = bits.reshape(new_shape)
-
-        # Validate input (excluded from compilation to avoid recompilation)
+        u = bits.reshape(-1, input_shape[-1])
         self._validate_input(u)
-
         batch_size = u.shape[0]
 
-        # Add "filler" bits to last positions to match info bit length k_ldpc
+        # Pad with filler bits and encode
         u_fill = torch.cat(
             [
                 u,
                 torch.zeros(
-                    batch_size, self._k_ldpc - self._k, dtype=u.dtype, device=u.device
+                    batch_size, self._k_ldpc - self._k,
+                    dtype=u.dtype, device=u.device,
                 ),
             ],
             dim=1,
         )
-
-        # Use optimized encoding based on gather
         c = self._encode_fast(u_fill.to(self.dtype))
+        c = c.reshape(batch_size, self._n_ldpc)
 
-        c = c.reshape(batch_size, self._n_ldpc)  # remove last dim
+        # Remove filler bits → compressed codeword
+        c_no_filler = torch.cat(
+            [c[:, :self._k], c[:, self._k_ldpc:]], dim=1
+        )
 
-        # Remove filler bits at pos (k, k_ldpc)
-        c_no_filler1 = c[:, : self._k]
-        c_no_filler2 = c[:, self._k_ldpc :]
+        # --- Rate matching ------------------------------------------------
+        # Compressed RM buffer: skip first 2Z punctured positions
+        c_rm = c_no_filler[:, 2 * self._z :]  # [batch, n_cb_comp]
 
-        c_no_filler = torch.cat([c_no_filler1, c_no_filler2], dim=1)
+        if rv is None:
+            c_out = c_rm[:, :self._n]  # [batch, n]
+            output_shape = input_shape[:-1] + [self.n]
+        else:
+            starts = self.get_start_positions_comp(rv)
+            n_cb_comp = self.n_cb_comp
+            rv_slices = []
+            for start in starts:
+                if start + self._n <= n_cb_comp:
+                    rv_slices.append(c_rm[:, start:start + self._n])
+                else:
+                    first_len = n_cb_comp - start
+                    rv_slices.append(torch.cat(
+                        [c_rm[:, start:], c_rm[:, :self._n - first_len]],
+                        dim=1,
+                    ))
+            c_out = torch.stack(rv_slices, dim=1)  # [batch, num_rvs, n]
+            output_shape = input_shape[:-1] + [len(rv), self.n]
 
-        # Shorten the first 2*Z positions and end after n bits
-        # (remaining parity bits can be used for HARQ)
-        c_short = c_no_filler[:, 2 * self._z : 2 * self._z + self.n]
-
-        # If num_bits_per_symbol is provided, apply output interleaver as
-        # specified in Sec. 5.4.2.2 in 38.212
+        # Output interleaver (Sec. 5.4.2.2) — works on last dim for any rank
         if self._num_bits_per_symbol is not None:
-            c_short = c_short[:, self._out_int]
+            c_out = c_out[..., self._out_int]
 
-        # Reshape c_short so that it matches the original input dimensions
-        output_shape = input_shape[:-1] + [self.n]
         output_shape[0] = -1
-        c_reshaped = c_short.reshape(output_shape)
-
-        # Cast back to input dtype
-        c_reshaped = c_reshaped.to(bits.dtype)
-
-        return c_reshaped
+        return c_out.reshape(output_shape).to(bits.dtype)
 
 

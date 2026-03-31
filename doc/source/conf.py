@@ -37,6 +37,7 @@ extensions = [
     "sphinx_copybutton",
     "sphinx.ext.autosummary",
     "nbsphinx",
+    "_ext.list_registry",
     "sphinxcontrib.bibtex",
     "_ext.input_output_fields",
     "_ext.typing_links",

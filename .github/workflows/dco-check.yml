@@ -1,0 +1,54 @@
+##
+## SPDX-FileCopyrightText: Copyright (c) 2021-2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+## SPDX-License-Identifier: Apache-2.0
+##
+
+name: "DCO Check"
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  dco:
+    name: DCO Sign-off
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check commits for sign-off
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        echo "Checking commits from ${BASE_SHA} to ${HEAD_SHA} for 'Signed-off-by' ..."
+        MISSING=""
+        while IFS= read -r commit; do
+          MESSAGE=$(git log --format="%B" -n 1 "$commit")
+          if ! echo "$MESSAGE" | grep -qE "^Signed-off-by: .+ <.+@.+>$"; then
+            SHORT=$(git log --format="%h %s" -n 1 "$commit")
+            MISSING="${MISSING}\n  - ${SHORT}"
+          fi
+        done < <(git rev-list "${BASE_SHA}..${HEAD_SHA}")
+
+        if [ -n "$MISSING" ]; then
+          echo ""
+          echo "ERROR: The following commits are missing a 'Signed-off-by' trailer:"
+          echo -e "$MISSING"
+          echo ""
+          echo "Each commit must include a sign-off in the form:"
+          echo "  Signed-off-by: Full Name <email@example.com>"
+          echo ""
+          echo "You can add it automatically with: git commit --amend --signoff"
+          echo "Or rewrite all PR commits with:    git rebase --signoff HEAD~<n>"
+          exit 1
+        fi
+
+        echo "All commits are signed off."

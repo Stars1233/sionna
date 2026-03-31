@@ -512,7 +512,7 @@ class PolarSCLDecoder(Block):
             # Register as tensor buffer to avoid torch.tensor() in call
             self.register_buffer(
                 "_ind_iil_inv_t",
-                torch.tensor(ind_iil_inv, dtype=torch.int64, device=self.device),
+                torch.tensor(ind_iil_inv, dtype=torch.int32, device=self.device),
             )
         else:
             self._iil = False
@@ -857,10 +857,6 @@ class PolarSCLDecoder(Block):
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Sort decoders according to their path metric in PyTorch."""
         ind = torch.argsort(msg_pm, dim=-1)
-
-        # Gather along the decoder dimension (dim=1)
-        batch_size = msg_pm.shape[0]
-        batch_idx = torch.arange(batch_size, device=msg_pm.device)
 
         # For msg_pm: [batch, 2*L]
         msg_pm = torch.gather(msg_pm, 1, ind)
@@ -1929,20 +1925,20 @@ class Polar5GDecoder(Block):
         self.register_buffer(
             "_ind_ch_int_inv_t",
             torch.tensor(
-                self.ind_ch_int_inv, dtype=torch.int64, device=self.device
+                self.ind_ch_int_inv, dtype=torch.int32, device=self.device
             ),
         )
         self.register_buffer(
             "_ind_sub_int_inv_t",
             torch.tensor(
-                self.ind_sub_int_inv, dtype=torch.int64, device=self.device
+                self.ind_sub_int_inv, dtype=torch.int32, device=self.device
             ),
         )
         if self._iil:
             self.register_buffer(
                 "_ind_iil_inv_t",
                 torch.tensor(
-                    self.ind_iil_inv, dtype=torch.int64, device=self.device
+                    self.ind_iil_inv, dtype=torch.int32, device=self.device
                 ),
             )
         else:

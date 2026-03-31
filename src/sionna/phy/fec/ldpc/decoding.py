@@ -318,16 +318,16 @@ class LDPCBPDecoder(Block):
             self.register_buffer(
                 "_cn_schedule",
                 torch.arange(
-                    self._num_cns, dtype=torch.long, device=self.device
+                    self._num_cns, dtype=torch.int32, device=self.device
                 ).unsqueeze(0),
             )
         elif isinstance(cn_schedule, (np.ndarray, torch.Tensor)):
             if isinstance(cn_schedule, np.ndarray):
                 cn_schedule = torch.tensor(
-                    cn_schedule, dtype=torch.long, device=self.device
+                    cn_schedule, dtype=torch.int32, device=self.device
                 )
             else:
-                cn_schedule = cn_schedule.to(dtype=torch.long, device=self.device)
+                cn_schedule = cn_schedule.to(dtype=torch.int32, device=self.device)
             self._scheduling = "custom"
             if len(cn_schedule.shape) != 2:
                 raise ValueError("cn_schedule must be of rank 2.")
@@ -348,19 +348,19 @@ class LDPCBPDecoder(Block):
         v2c_perm_inv = np.argsort(v2c_perm)
 
         self.register_buffer(
-            "_v2c_perm", torch.tensor(v2c_perm, dtype=torch.long, device=self.device)
+            "_v2c_perm", torch.tensor(v2c_perm, dtype=torch.int32, device=self.device)
         )
         self.register_buffer(
             "_v2c_perm_inv",
-            torch.tensor(v2c_perm_inv, dtype=torch.long, device=self.device),
+            torch.tensor(v2c_perm_inv, dtype=torch.int32, device=self.device),
         )
         self.register_buffer(
             "_vn_idx_t",
-            torch.tensor(self._vn_idx, dtype=torch.long, device=self.device),
+            torch.tensor(self._vn_idx, dtype=torch.int32, device=self.device),
         )
         self.register_buffer(
             "_cn_idx_t",
-            torch.tensor(self._cn_idx, dtype=torch.long, device=self.device),
+            torch.tensor(self._cn_idx, dtype=torch.int32, device=self.device),
         )
 
         # Compute row splits for CN perspective (after v2c_perm)
@@ -368,14 +368,14 @@ class LDPCBPDecoder(Block):
         cn_row_splits = self._compute_row_splits(cn_idx_sorted, self._num_cns)
         self.register_buffer(
             "_cn_row_splits",
-            torch.tensor(cn_row_splits, dtype=torch.long, device=self.device),
+            torch.tensor(cn_row_splits, dtype=torch.int32, device=self.device),
         )
 
         # Compute row splits for VN perspective
         vn_row_splits = self._compute_row_splits(self._vn_idx, self._num_vns)
         self.register_buffer(
             "_vn_row_splits",
-            torch.tensor(vn_row_splits, dtype=torch.long, device=self.device),
+            torch.tensor(vn_row_splits, dtype=torch.int32, device=self.device),
         )
 
         # Compute max degrees for padding
@@ -424,7 +424,7 @@ class LDPCBPDecoder(Block):
 
     def _compute_row_splits(self, idx: np.ndarray, num_nodes: int) -> np.ndarray:
         """Compute row splits from sorted indices."""
-        row_splits = np.zeros(num_nodes + 1, dtype=np.int64)
+        row_splits = np.zeros(num_nodes + 1, dtype=np.int32)
         for i in idx:
             row_splits[i + 1] += 1
         row_splits = np.cumsum(row_splits)
@@ -435,7 +435,7 @@ class LDPCBPDecoder(Block):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Build padded gather indices and mask for vectorized operations."""
         # Create padded index array
-        gather_idx = np.zeros((num_nodes, max_degree), dtype=np.int64)
+        gather_idx = np.zeros((num_nodes, max_degree), dtype=np.int32)
         mask = np.zeros((num_nodes, max_degree), dtype=np.float32)
 
         for node in range(num_nodes):
@@ -447,7 +447,7 @@ class LDPCBPDecoder(Block):
                 mask[node, :degree] = 1.0
 
         return (
-            torch.tensor(gather_idx, dtype=torch.long, device=self.device),
+            torch.tensor(gather_idx, dtype=torch.int32, device=self.device),
             torch.tensor(mask, dtype=self.dtype, device=self.device),
         )
 
@@ -455,14 +455,14 @@ class LDPCBPDecoder(Block):
         self, row_splits: np.ndarray, num_nodes: int, max_degree: int
     ) -> torch.Tensor:
         """Build scatter indices for converting padded format back to flat."""
-        scatter_idx = np.zeros((num_nodes, max_degree), dtype=np.int64)
+        scatter_idx = np.zeros((num_nodes, max_degree), dtype=np.int32)
         for node in range(num_nodes):
             start = row_splits[node]
             end = row_splits[node + 1]
             degree = end - start
             if degree > 0:
                 scatter_idx[node, :degree] = np.arange(start, end)
-        return torch.tensor(scatter_idx, dtype=torch.long, device=self.device)
+        return torch.tensor(scatter_idx, dtype=torch.int32, device=self.device)
 
     def _build_valid_scatter_indices(
         self, row_splits: np.ndarray, num_nodes: int, max_degree: int
@@ -498,8 +498,8 @@ class LDPCBPDecoder(Block):
                 valid_edge_idx.append(edge_idx)
 
         return (
-            torch.tensor(valid_positions, dtype=torch.long, device=self.device),
-            torch.tensor(valid_edge_idx, dtype=torch.long, device=self.device),
+            torch.tensor(valid_positions, dtype=torch.int32, device=self.device),
+            torch.tensor(valid_edge_idx, dtype=torch.int32, device=self.device),
         )
 
     def _build_custom_schedule_indices(
@@ -537,7 +537,7 @@ class LDPCBPDecoder(Block):
             max_active_degree = max(active_degrees) if active_degrees else 0
 
             # Build gather indices for active CNs
-            gather_idx = np.zeros((num_active, max_active_degree), dtype=np.int64)
+            gather_idx = np.zeros((num_active, max_active_degree), dtype=np.int32)
             mask = np.zeros((num_active, max_active_degree), dtype=np.float32)
             edge_indices = []  # Edge indices in VN order
             valid_positions = []  # Valid positions in flattened padded array
@@ -559,16 +559,16 @@ class LDPCBPDecoder(Block):
                         valid_positions.append(i * max_active_degree + d)
 
             self._schedule_gather_idx.append(
-                torch.tensor(gather_idx, dtype=torch.long, device=self.device)
+                torch.tensor(gather_idx, dtype=torch.int32, device=self.device)
             )
             self._schedule_cn_mask.append(
                 torch.tensor(mask, dtype=self.dtype, device=self.device)
             )
             self._schedule_edge_idx.append(
-                torch.tensor(edge_indices, dtype=torch.long, device=self.device)
+                torch.tensor(edge_indices, dtype=torch.int32, device=self.device)
             )
             self._schedule_valid_positions.append(
-                torch.tensor(valid_positions, dtype=torch.long, device=self.device)
+                torch.tensor(valid_positions, dtype=torch.int32, device=self.device)
             )
 
     ###############################
@@ -901,7 +901,6 @@ class LDPCBPDecoder(Block):
 
         # Reshape to match original input dimensions
         output_shape = llr_ch_shape.copy()
-        output_shape[0] = -1
         x_reshaped = x_hat.reshape(output_shape)
 
         if not self._return_state:
@@ -1299,6 +1298,12 @@ class LDPC5GDecoder(LDPCBPDecoder):
     (the training of some check node types may be not supported) following the
     concept of "weighted BP" :cite:p:`Nachmani`.
 
+    When ``harq_mode=True``, the decoder supports HARQ-IR decoding.
+    Pass ``rv`` to :meth:`call` together with stacked LLRs of shape
+    ``[..., num_rvs, n]`` to combine multiple redundancy versions
+    before BP decoding.  PCM pruning is automatically disabled in
+    HARQ mode.
+
     :param encoder: An instance of
         :class:`~sionna.phy.fec.ldpc.encoding.LDPC5GEncoder` containing the
         correct code parameters.
@@ -1332,7 +1337,8 @@ class LDPC5GDecoder(LDPCBPDecoder):
         check nodes are removed from the decoding graph (see :cite:p:`Cammerer` for
         details). Besides numerical differences, this should yield the same
         decoding result but improves the decoding throughput and reduces the
-        memory footprint.
+        memory footprint.  Automatically set to `False` when
+        ``harq_mode=True``.
     :param num_iter: Defining the number of decoder iterations (due to
         batching, no early stopping used at the moment!).
     :param llr_max: Internal clipping value for all internal messages. If
@@ -1354,12 +1360,21 @@ class LDPC5GDecoder(LDPCBPDecoder):
         the last decoding iteration are returned, and ``msg_vn`` or `None`
         needs to be given as a second input when calling the decoder.
         This can be used for iterative demapping and decoding.
+    :param harq_mode: If `True`, the decoder operates in HARQ-IR mode.
+        PCM pruning is automatically disabled, and ``rv`` can be passed
+        to :meth:`call` to combine multiple redundancy versions.
     :param precision: Precision used for internal calculations and outputs.
         If set to `None`, :py:attr:`~sionna.phy.config.precision` is used.
     :param device: Device for computation (e.g., 'cpu', 'cuda:0').
 
-    :input llr_ch: [..., n], `torch.float`.
+    :input llr_ch: [..., n] or [..., num_rvs, n], `torch.float`.
         Tensor containing the channel logits/llr values.
+        When ``rv`` is given, the second-to-last dimension must equal
+        ``len(rv)``.
+
+    :input rv: `None` | list of int.
+        Redundancy versions corresponding to the stacked LLRs.
+        If `None`, standard single-transmission decoding is used.
 
     :input msg_v2c: `None` | [batch_size, num_edges], `torch.float`.
         Tensor of VN messages representing the internal decoder state.
@@ -1410,6 +1425,12 @@ class LDPC5GDecoder(LDPCBPDecoder):
         u_hat = decoder(llr_ch)
         print(torch.equal(u, u_hat))
         # True
+
+        # HARQ example: combine two redundancy versions
+        dec_harq = LDPC5GDecoder(encoder, num_iter=20, harq_mode=True)
+        c_rvs = encoder(u, rv=[0, 2])              # [10, 2, 200]
+        llr_rvs = 2.0 * (2.0 * c_rvs - 1.0)
+        u_hat = dec_harq(llr_rvs, rv=[0, 2])       # [10, 100]
     """
 
     def __init__(
@@ -1426,6 +1447,7 @@ class LDPC5GDecoder(LDPCBPDecoder):
         c2v_callbacks: Optional[List[Callable]] = None,
         prune_pcm: bool = True,
         return_state: bool = False,
+        harq_mode: bool = False,
         precision: Optional[str] = None,
         device: Optional[str] = None,
         **kwargs,
@@ -1445,6 +1467,10 @@ class LDPC5GDecoder(LDPCBPDecoder):
         if not isinstance(return_state, bool):
             raise TypeError("return_state must be bool.")
 
+        if not isinstance(harq_mode, bool):
+            raise TypeError("harq_mode must be bool.")
+        self._harq_mode = harq_mode
+
         # Deprecation warning for cn_type
         if "cn_type" in kwargs:
             raise TypeError("'cn_type' is deprecated; use 'cn_update' instead.")
@@ -1452,6 +1478,10 @@ class LDPC5GDecoder(LDPCBPDecoder):
         # Prune punctured degree-1 VNs and connected CNs
         if not isinstance(prune_pcm, bool):
             raise TypeError("prune_pcm must be bool.")
+
+        # Pruning must be disabled in HARQ mode
+        if harq_mode:
+            prune_pcm = False
         self._prune_pcm = prune_pcm
 
         if prune_pcm:
@@ -1543,82 +1573,100 @@ class LDPC5GDecoder(LDPCBPDecoder):
         llr_ch: torch.Tensor,
         /,
         *,
+        rv: Optional[List[int]] = None,
         num_iter: Optional[int] = None,
         msg_v2c: Optional[torch.Tensor] = None,
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        """Iterative BP decoding function and rate matching.
+        """Iterative BP decoding function and rate-recovery.
 
-        :param llr_ch: Channel LLRs of shape [..., n].
+        :param llr_ch: Channel LLRs of shape ``[..., n]`` (standard) or
+            ``[..., num_rvs, n]`` (HARQ).
+        :param rv: List of RV indices matching the stacked LLRs.
+            If `None`, standard single-RV decoding is used.  In HARQ
+            mode (``harq_mode=True``), defaults to ``[0]``.
         :param num_iter: Number of iterations. If `None`, uses default.
         :param msg_v2c: Initial v2c messages for IDD schemes.
 
-        :output x_hat: Decoded bits of shape [..., n] or [..., k].
+        :output x_hat: Decoded bits of shape ``[..., n]`` or ``[..., k]``.
 
         :output msg_v2c: Decoder state. Returned only if ``return_state``
             is `True`.
         """
         llr_ch_shape = list(llr_ch.shape)
-        new_shape = [-1, self.encoder.n]
-        llr_ch_reshaped = llr_ch.reshape(new_shape)
-        batch_size = llr_ch_reshaped.shape[0]
+        input_device = llr_ch.device
+        n = self.encoder.n
+        k = self.encoder.k
+        z = self.encoder.z
+        k_filler = self.encoder.k_filler
+        nb_pruned = self._nb_pruned_nodes
+        buf_len = self.encoder.n_cb_comp - nb_pruned
 
-        # Invert if rate-matching output interleaver was applied
-        if self._encoder.num_bits_per_symbol is not None:
-            llr_ch_reshaped = llr_ch_reshaped[:, self._encoder.out_int_inv]
+        # --- Build compressed RM buffer -----------------------------------
+        if self._harq_mode:
+            if rv is None:
+                rv = [0]
+            rv = list(rv)
+            num_rvs = len(rv)
 
-        # Use input device for all created tensors
-        input_device = llr_ch_reshaped.device
+            if num_rvs > 1:
+                if llr_ch_shape[-2] != num_rvs:
+                    raise ValueError(
+                        f"Second-to-last dimension of llr_ch "
+                        f"({llr_ch_shape[-2]}) must equal len(rv) "
+                        f"({num_rvs})."
+                    )
+                llr_ch_flat = llr_ch.reshape(-1, num_rvs, n)
+                leading_shape = llr_ch_shape[:-2]
+            else:
+                has_rv_dim = (len(llr_ch_shape) >= 3
+                              and llr_ch_shape[-2] == 1)
+                leading_shape = (llr_ch_shape[:-2] if has_rv_dim
+                                 else llr_ch_shape[:-1])
+                llr_ch_flat = llr_ch.reshape(-1, n).unsqueeze(1)
+            batch_size = llr_ch_flat.shape[0]
 
-        # Undo puncturing of the first 2*Z bit positions
+            # Accumulate multiple RVs via pad + roll
+            starts = self.encoder.get_start_positions_comp(rv)
+            pad_len = buf_len - n
+            llr_buf = torch.zeros(
+                batch_size, buf_len, dtype=self.dtype, device=input_device,
+            )
+            for rv_idx in range(num_rvs):
+                llr_rv = llr_ch_flat[:, rv_idx, :]
+                if self._encoder.num_bits_per_symbol is not None:
+                    llr_rv = llr_rv[:, self._encoder.out_int_inv]
+                llr_buf = llr_buf + torch.nn.functional.pad(
+                    llr_rv.to(self.dtype), (0, pad_len)
+                ).roll(starts[rv_idx], dims=1)
+        else:
+            leading_shape = llr_ch_shape[:-1]
+            llr_ch_reshaped = llr_ch.reshape(-1, n)
+            batch_size = llr_ch_reshaped.shape[0]
+
+            if self._encoder.num_bits_per_symbol is not None:
+                llr_ch_reshaped = llr_ch_reshaped[
+                    :, self._encoder.out_int_inv
+                ]
+            llr_buf = torch.nn.functional.pad(
+                llr_ch_reshaped, (0, buf_len - n)
+            )
+
+        # --- Reassemble full n_ldpc vector ---------------------------------
+        n_sys_rm = k - 2 * z
         llr_5g = torch.cat(
             [
-                torch.zeros(
-                    batch_size,
-                    2 * self.encoder.z,
-                    dtype=self.dtype,
-                    device=input_device,
-                ),
-                llr_ch_reshaped,
+                torch.zeros(batch_size, 2 * z,
+                            dtype=self.dtype, device=input_device),
+                llr_buf[:, :n_sys_rm],
+                -self._llr_max * torch.ones(batch_size, k_filler,
+                                            dtype=self.dtype,
+                                            device=input_device),
+                llr_buf[:, n_sys_rm:],
             ],
             dim=1,
         )
 
-        # Undo puncturing of the last positions
-        k_filler = self.encoder.k_ldpc - self.encoder.k
-        nb_punc_bits = (
-            (self.encoder.n_ldpc - k_filler) - self.encoder.n - 2 * self.encoder.z
-        )
-
-        llr_5g = torch.cat(
-            [
-                llr_5g,
-                torch.zeros(
-                    batch_size,
-                    nb_punc_bits - self._nb_pruned_nodes,
-                    dtype=self.dtype,
-                    device=input_device,
-                ),
-            ],
-            dim=1,
-        )
-
-        # Undo shortening (= add 0 positions after k bits, i.e. LLR=LLR_max)
-        x1 = llr_5g[:, : self.encoder.k]
-
-        # Parity part
-        nb_par_bits = (
-            self.encoder.n_ldpc - k_filler - self.encoder.k - self._nb_pruned_nodes
-        )
-        x2 = llr_5g[:, self.encoder.k : self.encoder.k + nb_par_bits]
-
-        # Filler bits get large negative LLR (due to logit definition)
-        z = -self._llr_max * torch.ones(
-            batch_size, k_filler, dtype=self.dtype, device=input_device
-        )
-
-        llr_5g = torch.cat([x1, z, x2], dim=1)
-
-        # Run the core decoder
+        # --- BP decoding --------------------------------------------------
         output = super().call(llr_5g, num_iter=num_iter, msg_v2c=msg_v2c)
 
         if self._return_state:
@@ -1626,45 +1674,28 @@ class LDPC5GDecoder(LDPCBPDecoder):
         else:
             x_hat = output
 
+        # --- Output formatting --------------------------------------------
         if self._return_infobits:
-            # Return only info bits (5G NR code is systematic)
-            u_hat = x_hat[:, : self.encoder.k]
-
-            # Reshape to match original input dimensions
-            output_shape = llr_ch_shape[:-1] + [self.encoder.k]
+            u_hat = x_hat[:, :k]
+            output_shape = leading_shape + [k]
             output_shape[0] = -1
             u_reshaped = u_hat.reshape(output_shape)
-
             if self._return_state:
                 return u_reshaped, msg_v2c_out
-            else:
-                return u_reshaped
+            return u_reshaped
 
-        else:
-            # Return all codeword bits
-            x = x_hat.reshape(batch_size, self._n_pruned)
+        x = x_hat.reshape(batch_size, self._n_pruned)
+        x_no_filler1 = x[:, :k]
+        x_no_filler2 = x[:, self.encoder.k_ldpc:self._n_pruned]
+        x_no_filler = torch.cat([x_no_filler1, x_no_filler2], dim=1)
+        x_short = x_no_filler[:, 2 * z:2 * z + n]
 
-            # Remove filler bits at pos (k, k_ldpc)
-            x_no_filler1 = x[:, : self.encoder.k]
-            x_no_filler2 = x[:, self.encoder.k_ldpc : self._n_pruned]
+        if self._encoder.num_bits_per_symbol is not None:
+            x_short = x_short[:, self._encoder.out_int]
 
-            x_no_filler = torch.cat([x_no_filler1, x_no_filler2], dim=1)
-
-            # Shorten the first 2*Z positions and end after n bits
-            x_short = x_no_filler[
-                :, 2 * self.encoder.z : 2 * self.encoder.z + self.encoder.n
-            ]
-
-            # If used, apply rate-matching output interleaver again
-            if self._encoder.num_bits_per_symbol is not None:
-                x_short = x_short[:, self._encoder.out_int]
-
-            # Reshape to match original input dimensions
-            output_shape = llr_ch_shape.copy()
-            output_shape[0] = -1
-            x_short = x_short.reshape(output_shape)
-
-            if self._return_state:
-                return x_short, msg_v2c_out
-            else:
-                return x_short
+        output_shape = leading_shape + [n]
+        output_shape[0] = -1
+        x_short = x_short.reshape(output_shape)
+        if self._return_state:
+            return x_short, msg_v2c_out
+        return x_short
